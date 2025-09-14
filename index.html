@@ -186,11 +186,13 @@ async function endSession(success, reason){
   // フィードバック（音/読み上げ/バイブ）
   try { navigator.vibrate && navigator.vibrate(success ? [40,40,40] : [160]); } catch(e){}
   if (success) {
+    beep(1046, 150); setTimeout(()=>beep(1318, 180), 160); // 成功チャイム
     speak(`お疲れ様。目標時間、${minutes} 分。ひと息いれましょうか？`);
   } else {
+    beep(392, 200); setTimeout(()=>beep(330, 220), 220);   // 失敗チャイム
     speak(`着座してから ${minutes} 分しか経っていません。もう少し頑張れます。`);
   }
-
+  
   // サーバPOST（任意）
   if (config.enablePost) {
     fetch(config.endpoint, {
@@ -249,15 +251,7 @@ function speak(text){
     window.speechSynthesis.speak(u);
   }catch(e){}
 }
-
-if (success) {
-  beep(1046, 150); setTimeout(()=>beep(1318, 180), 160); // 短い上昇チャイム
-  speak(`お疲れ様。目標時間、${minutes} 分。ひと息いれましょうか？`);
-} else {
-  beep(392, 200); setTimeout(()=>beep(330, 220), 220);   // 短い下降チャイム
-  speak(`着座してから ${minutes} 分しか経っていません。もう少し頑張れます。`);
-}
-  
+ 
 function fmt(sec){
   const m = Math.floor(sec/60), s = sec%60;
   return String(m).padStart(2,'0') + ":" + String(s).padStart(2,'0');
