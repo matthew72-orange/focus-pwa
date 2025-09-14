@@ -169,17 +169,6 @@ function startSession(task, mins){
   startKeepAwake();
 
 
-  // iOSスリープ抑止ワークアラウンド（ユーザー操作後のみ有効）
-  if (!keepAwakeVideo) {
-    const v = document.createElement('video');
-    v.setAttribute('playsinline','');
-    v.muted = true; v.loop = true;
-    // 1pxの無音MP4データ（極小）
-    v.src = "data:video/mp4;base64,AAAAIGZ0eXBpc28yAAAAAGlzbzJpc28yYXZjMQAAAAhmcmVlAAAAH21kYXQAAAAAAAABAAAAGG1vb3YAAABsbXZoZAAAAAB8AAABcAAAAgABAAAB9AAACABAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABA==";
-    v.play().catch(()=>{});
-    keepAwakeVideo = v;
-  }
-
   // 初回ユーザー操作後の音声権限を確保
   try { window.speechSynthesis.cancel(); } catch(e){}
 }
