@@ -171,12 +171,23 @@ async function endSession(success, reason){
     }).catch(()=>{});
   }
 
-  // 画面戻す & スリープ抑止解除
-  run.classList.add('hidden');
-  setup.classList.remove('hidden');
-  startAt = null;
-  if (keepAwakeVideo){ try{ keepAwakeVideo.pause(); }catch(e){} keepAwakeVideo.remove(); keepAwakeVideo=null; }
-}
+  // ★ 成功／失敗メッセージを表示してから戻す
+  run.innerHTML = ""; // いったんタイマー表示を消す
+  const msg = document.createElement("div");
+  msg.style.fontSize = "22px";
+  msg.style.margin = "20px 0";
+  msg.textContent = success
+    ? `🎉 お疲れ様！${minutes}分達成しました！`
+    : `💤 ${minutes}分で中断されました`;
+  run.appendChild(msg);
+
+  // 4秒後に初期画面へ戻す
+  setTimeout(() => {
+    run.classList.add('hidden');
+    setup.classList.remove('hidden');
+    startAt = null;
+    if (keepAwakeVideo){ try{ keepAwakeVideo.pause(); }catch(e){} keepAwakeVideo.remove(); keepAwakeVideo=null; }
+  }, 4000);
 
 function speak(text){
   try{
