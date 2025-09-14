@@ -74,6 +74,33 @@ const config = {
   enablePost: false // サーバ未設定なら false のままでOK（POSTしない）
 };
 
+let audioCtx = null, audioUnlocked = false;
+function initAudioUnlock(){
+  if (audioUnlocked) return;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  audioCtx = new Ctx();
+  // ごく短い可聴トーンで“音を解錠”
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.001; // ほぼ無音
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start();
+  setTimeout(()=>{ osc.stop(); audioUnlocked = true; }, 60);
+}
+// 成功/失敗用の簡易チャイム（fallback）
+function beep(freq=880, ms=150){
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.08;
+  osc.frequency.value = freq;
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start();
+  setTimeout(()=>{ gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.12); }, ms-30);
+  setTimeout(()=>osc.stop(), ms+40);
+}
+  
 // ------- PWA: SW登録 -------
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -115,6 +142,7 @@ startBtn.addEventListener('click', async () => {
 stopBtn.addEventListener('click', () => endSession(false, 'manual'));
 
 function startSession(task, mins){
+  initAudioUnlock(); // ← 追加：ユーザー操作直後に音を解錠
   startAt = new Date();
   targetSec = mins * 60;
   setup.classList.add('hidden');
@@ -198,14 +226,38 @@ async function endSession(success, reason){
 } // ←←← ★ これが endSession() を閉じるカッコ
 // （この下に function speak(...) / function fmt(...) が続く）
   
+let jaVoice = null;
+function pickJaVoice(){
+  const voices = window.speechSynthesis?.getVoices?.() || [];
+  // 日本語優先（Kyoko/Otoya/“ja-JP”など）
+  jaVoice = voices.find(v => (v.lang||"").toLowerCase().startsWith("ja"))
+        || voices.find(v => /kyoko|otoya/i.test(v.name||""))
+        || null;
+}
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = pickJaVoice;
+  // 端末によっては即取得できることもある
+  setTimeout(pickJaVoice, 300);
+}
+
 function speak(text){
   try{
+    if (!('speechSynthesis' in window)) return;
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'ja-JP';
-    speechSynthesis.speak(u);
+    if (jaVoice) u.voice = jaVoice;
+    u.lang = 'ja-JP'; u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
+    window.speechSynthesis.speak(u);
   }catch(e){}
 }
 
+if (success) {
+  beep(1046, 150); setTimeout(()=>beep(1318, 180), 160); // 短い上昇チャイム
+  speak(`お疲れ様。目標時間、${minutes} 分。ひと息いれましょうか？`);
+} else {
+  beep(392, 200); setTimeout(()=>beep(330, 220), 220);   // 短い下降チャイム
+  speak(`着座してから ${minutes} 分しか経っていません。もう少し頑張れます。`);
+}
+  
 function fmt(sec){
   const m = Math.floor(sec/60), s = sec%60;
   return String(m).padStart(2,'0') + ":" + String(s).padStart(2,'0');
