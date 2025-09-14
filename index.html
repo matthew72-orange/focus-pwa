@@ -188,7 +188,8 @@ async function endSession(success, reason){
     startAt = null;
     if (keepAwakeVideo){ try{ keepAwakeVideo.pause(); }catch(e){} keepAwakeVideo.remove(); keepAwakeVideo=null; }
   }, 4000);
-
+} // ←←← ★ これが endSession() を閉じるカッコ
+  
 function speak(text){
   try{
     const u = new SpeechSynthesisUtterance(text);
