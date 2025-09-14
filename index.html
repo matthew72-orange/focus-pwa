@@ -171,8 +171,10 @@ async function endSession(success, reason){
     }).catch(()=>{});
   }
 
-  // ★ 成功／失敗メッセージを表示してから戻す
-  run.innerHTML = ""; // いったんタイマー表示を消す
+  // ★ 成功／失敗メッセージを表示（既存UIは一時的に非表示）
+  const olds = Array.from(run.children);
+  olds.forEach(el => el.classList.add('hidden'));
+
   const msg = document.createElement("div");
   msg.style.fontSize = "22px";
   msg.style.margin = "20px 0";
@@ -181,14 +183,20 @@ async function endSession(success, reason){
     : `💤 ${minutes}分で中断されました`;
   run.appendChild(msg);
 
-  // 4秒後に初期画面へ戻す
+  // 4秒後に初期画面へ戻す（UIも元に戻す）
   setTimeout(() => {
+    run.removeChild(msg);
+    olds.forEach(el => el.classList.remove('hidden'));
     run.classList.add('hidden');
     setup.classList.remove('hidden');
     startAt = null;
-    if (keepAwakeVideo){ try{ keepAwakeVideo.pause(); }catch(e){} keepAwakeVideo.remove(); keepAwakeVideo=null; }
+    if (keepAwakeVideo){
+      try{ keepAwakeVideo.pause(); }catch(e){}
+      keepAwakeVideo.remove(); keepAwakeVideo=null;
+    }
   }, 4000);
 } // ←←← ★ これが endSession() を閉じるカッコ
+// （この下に function speak(...) / function fmt(...) が続く）
   
 function speak(text){
   try{
