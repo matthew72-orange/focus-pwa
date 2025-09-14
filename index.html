@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Focus Timer PWA</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  :root{--bg:#0b0b0c;--fg:#f7f7f8;--muted:#9aa0a6;--accent:#4f8cff;}
+  html,body{height:100%;}
+  body{margin:0; font-family:-apple-system, system-ui, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", sans-serif; background:var(--bg); color:var(--fg); display:flex; align-items:center; justify-content:center;}
+  .card{width:min(720px, 92vw); padding:20px 20px 28px; border-radius:20px; background:#151517; box-shadow:0 10px 30px rgba(0,0,0,.35);}
+  h1{margin:4px 0 12px; font-size:22px; font-weight:700;}
+  label{display:block; margin:12px 0 4px; color:var(--muted);}
+  input, select{width:100%; padding:12px 14px; border-radius:12px; border:1px solid #2a2a2e; background:#0f0f11; color:var(--fg); font-size:18px; outline:none;}
+  button{appearance:none; border:0; border-radius:14px; padding:12px 16px; font-size:18px; font-weight:700; color:white; background:var(--accent); cursor:pointer;}
+  .row{display:flex; gap:12px; align-items:center;}
+  .row>*{flex:1}
+  .muted{color:var(--muted); font-size:14px;}
+  .center{display:flex; align-items:center; justify-content:center; text-align:center;}
+  .timer{font-variant-numeric:tabular-nums; font-size:64px; letter-spacing:1px; margin:6px 0 18px;}
+  .affirm{font-size:22px; margin:6px 0 10px;}
+  .pill{display:inline-block; padding:4px 10px; border-radius:999px; background:#232327; color:#c9ccd1; font-size:13px;}
+  .stack{display:flex; flex-direction:column; gap:12px;}
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Focus Timer</h1>
+
+    <div id="setup" class="stack">
+      <div>
+        <label>やること</label>
+        <input id="task" placeholder="英語/数学/読書 など" autocomplete="on">
+      </div>
+      <div class="row">
+        <div>
+          <label>目標時間（分）</label>
+          <select id="mins">
+            <option>25</option><option selected>50</option><option>90</option><option>120</option>
+          </select>
+        </div>
+        <div>
+          <label>通知メール（任意・サーバ経由）</label>
+          <input id="email" placeholder="family@example.com">
+        </div>
+      </div>
+      <div class="muted">※メール送信はサーバのエンドポイント設定が必要です（<code>config.endpoint</code> を編集）。</div>
+      <div class="row">
+        <button id="startBtn">スタート</button>
+        <button id="installBtn" class="hidden">ホーム追加</button>
+      </div>
+    </div>
+
+    <div id="run" class="hidden center" style="flex-direction:column;">
+      <div class="pill" id="taskLabel">Task</div>
+      <div class="affirm">集中中。わたしはやれる。💪</div>
+      <div class="timer" id="remain">00:00</div>
+      <div class="row" style="width:100%;"><button id="stopBtn" style="background:#e64a4a">中断（Fail）</button></div>
+      <div class="muted" style="margin-top:10px">⚠️ この画面から離れると即 Fail になります。</div>
+    </div>
+
+  </div>
+
+<script>
+// ------- 基本設定（必要に応じて編集） -------
+const config = {
+  endpoint: "https://example.com/focus_log", // ← あなたのGAS/Flask URLに変更
+  enablePost: false // サーバ未設定なら false のままでOK（POSTしない）
+};
+
+// ------- PWA: SW登録 -------
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
+
+// ------- 画面要素 -------
+const $ = s => document.querySelector(s);
+const setup = $('#setup'), run = $('#run');
+const startBtn = $('#startBtn'), stopBtn = $('#stopBtn');
+const taskInput = $('#task'), minsSel = $('#mins'), emailInput = $('#email');
+const remain = $('#remain'), taskLabel = $('#taskLabel');
+let startAt = null, targetSec = 0, tHandle = null, currentTask = "", userEmail = "";
+let keepAwakeVideo = null;
+
+// ------- ホーム追加（主にAndroid/一部ブラウザ） -------
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault(); deferredPrompt = e;
+  const ib = $('#installBtn');
+  ib.classList.remove('hidden');
+  ib.onclick = async () => { deferredPrompt.prompt(); deferredPrompt = null; ib.classList.add('hidden'); };
+});
+
+// ------- 画面離脱＝Fail -------
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) endSession(false, 'left-app');
+});
+
+// ------- スタート/ストップ -------
+startBtn.addEventListener('click', async () => {
+  currentTask = taskInput.value.trim() || 'Untitled';
+  userEmail = emailInput.value.trim();
+  const mins = parseInt(minsSel.value, 10);
+  startSession(currentTask, mins);
+});
+
+stopBtn.addEventListener('click', () => endSession(false, 'manual'));
+
+function startSession(task, mins){
+  startAt = new Date();
+  targetSec = mins * 60;
+  setup.classList.add('hidden');
+  run.classList.remove('hidden');
+  taskLabel.textContent = task;
+  updateTimer(); tHandle = setInterval(updateTimer, 250);
+
+  // iOSスリープ抑止ワークアラウンド（ユーザー操作後のみ有効）
+  if (!keepAwakeVideo) {
+    const v = document.createElement('video');
+    v.setAttribute('playsinline','');
+    v.muted = true; v.loop = true;
+    // 1pxの無音MP4データ（極小）
+    v.src = "data:video/mp4;base64,AAAAIGZ0eXBpc28yAAAAAGlzbzJpc28yYXZjMQAAAAhmcmVlAAAAH21kYXQAAAAAAAABAAAAGG1vb3YAAABsbXZoZAAAAAB8AAABcAAAAgABAAAB9AAACABAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABA==";
+    v.play().catch(()=>{});
+    keepAwakeVideo = v;
+  }
+
+  // 初回ユーザー操作後の音声権限を確保
+  try { window.speechSynthesis.cancel(); } catch(e){}
+}
+
+function updateTimer(){
+  const elapsed = Math.floor((Date.now()-startAt.getTime())/1000);
+  const left = Math.max(0, targetSec - elapsed);
+  remain.textContent = fmt(left);
+  if (left === 0) endSession(true, 'target');
+}
+
+async function endSession(success, reason){
+  if (!startAt) return;
+  clearInterval(tHandle); tHandle = null;
+  const endedAt = new Date();
+  const minutes = Math.floor((endedAt - startAt)/60000);
+  const payload = {
+    task: currentTask, email: userEmail || null,
+    started_at: startAt.toISOString(), ended_at: endedAt.toISOString(),
+    success, reason, minutes
+  };
+
+  // フィードバック（音/読み上げ/バイブ）
+  try { navigator.vibrate && navigator.vibrate(success ? [40,40,40] : [160]); } catch(e){}
+  if (success) {
+    speak(`お疲れ様。目標時間、${minutes} 分。ひと息いれましょうか？`);
+  } else {
+    speak(`着座してから ${minutes} 分しか経っていません。もう少し頑張れます。`);
+  }
+
+  // サーバPOST（任意）
+  if (config.enablePost) {
+    fetch(config.endpoint, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    }).catch(()=>{});
+  }
+
+  // 画面戻す & スリープ抑止解除
+  run.classList.add('hidden');
+  setup.classList.remove('hidden');
+  startAt = null;
+  if (keepAwakeVideo){ try{ keepAwakeVideo.pause(); }catch(e){} keepAwakeVideo.remove(); keepAwakeVideo=null; }
+}
+
+function speak(text){
+  try{
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ja-JP';
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+function fmt(sec){
+  const m = Math.floor(sec/60), s = sec%60;
+  return String(m).padStart(2,'0') + ":" + String(s).padStart(2,'0');
+}
+</script>
+</body>
+</html>
