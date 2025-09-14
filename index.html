@@ -279,6 +279,17 @@ function speakWithResume(utter){
     }, 200);
   }catch(e){}
 }
+
+// 追加：TTSを事前に目覚めさせる（超短いダミー発話）
+async function prepareTTS(){
+  if (!('speechSynthesis' in window)) return;
+  await waitForVoices(4000);    // ← タイムアウトを 4000ms に
+  pickJaVoice();
+  const u = new SpeechSynthesisUtterance(' '); // 空白1文字（無音に近い）
+  if (jaVoice) u.voice = jaVoice;
+  u.lang = 'ja-JP'; u.rate = 1.0; u.pitch = 1.0; u.volume = 0.01; // ほぼ無音
+  speakWithResume(u);
+}
   
 async function speak(text){
   if (!('speechSynthesis' in window)) return;
