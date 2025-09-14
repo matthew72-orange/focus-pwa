@@ -302,7 +302,129 @@ async function speak(text){
   u.lang = 'ja-JP'; u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
   speakWithResume(u);                 // ← ワークアラウンド付きで発話
 }
- 
+
+// ===== KEEP-AWAKE（WakeLock + 無音動画ループ + リトライ） =====
+let wakeLock = null;
+let keepAwakeVideo = null;
+let keepAwakeRetryTimer = null;
+let keepAwakeRetries = 0;
+
+async function requestWakeLock(){
+  if (!('wakeLock' in navigator)) return false;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => {
+      // 自動的に解放される場合がある（バッテリー/OS判断）
+      // コンソールでわかるように
+      console.log('[WakeLock] released');
+    });
+    console.log('[WakeLock] acquired');
+    return true;
+  } catch (e) {
+    console.log('[WakeLock] failed:', e && e.message);
+    return false;
+  }
+}
+
+function ensureKeepAwakeVideo(){
+  if (keepAwakeVideo && !keepAwakeVideo.isConnected) {
+    // DOMから消えてたら捨てる
+    keepAwakeVideo = null;
+  }
+  if (!keepAwakeVideo) {
+    const v = document.createElement('video');
+    v.setAttribute('playsinline','');
+    v.muted = true;
+    v.loop = true;
+    // 1px無音mp4（超短）—データURL
+    v.src = "data:video/mp4;base64,AAAAIGZ0eXBpc28yAAAAAGlzbzJpc28yYXZjMQAAAAhmcmVlAAAAH21kYXQAAAAAAAABAAAAGG1vb3YAAABsbXZoZAAAAAB8AAABcAAAAgABAAAB9AAACABAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABA==";
+    v.style.position = 'fixed';
+    v.style.width = '1px';
+    v.style.height = '1px';
+    v.style.opacity = '0';
+    v.style.pointerEvents = 'none';
+    document.body.appendChild(v);
+    keepAwakeVideo = v;
+  }
+  return keepAwakeVideo;
+}
+
+async function playKeepAwakeVideo(){
+  const v = ensureKeepAwakeVideo();
+  try {
+    // 既に再生中ならスキップ
+    if (!v.paused && !v.ended) return true;
+    await v.play();
+    console.log('[KeepAwakeVideo] playing');
+    keepAwakeRetries = 0;
+    return true;
+  } catch (e) {
+    console.log('[KeepAwakeVideo] play failed:', e && e.message);
+    return false;
+  }
+}
+
+// バックオフ付きで video.play() を再試行
+function scheduleKeepAwakeRetry(){
+  clearTimeout(keepAwakeRetryTimer);
+  keepAwakeRetries = Math.min(keepAwakeRetries + 1, 6);
+  const delay = 300 * keepAwakeRetries; // 0.3s, 0.6s, … 最大 ~1.8s
+  keepAwakeRetryTimer = setTimeout(async () => {
+    const ok = await playKeepAwakeVideo();
+    if (!ok) scheduleKeepAwakeRetry();
+  }, delay);
+}
+
+async function startKeepAwake(){
+  // 1) WakeLock（対応ブラウザ）
+  const wl = await requestWakeLock();
+  // 2) 無音動画ループ（iOS含む）
+  const ok = await playKeepAwakeVideo();
+  if (!ok) scheduleKeepAwakeRetry();
+  // 3) ユーザー操作/復帰で再開
+  window.addEventListener('pointerdown', resumeKeepAwake, {passive:true});
+  document.addEventListener('visibilitychange', onVisibility, {passive:true});
+  window.addEventListener('pagehide', onPageHide, {passive:true});
+  console.log('[KeepAwake] started', {wakeLock: wl, video: ok});
+}
+
+async function resumeKeepAwake(){
+  // WakeLockはフォアグラウンド復帰時に外れてることがある
+  if (!wakeLock) await requestWakeLock();
+  const ok = await playKeepAwakeVideo();
+  if (!ok) scheduleKeepAwakeRetry();
+}
+
+function onVisibility(){
+  if (!document.hidden) {
+    // 復帰時は再開
+    resumeKeepAwake();
+  }
+}
+
+function onPageHide(){
+  // iOSでBackForwardCacheに入る際の対策
+  stopKeepAwake();
+}
+
+function stopKeepAwake(){
+  clearTimeout(keepAwakeRetryTimer);
+  keepAwakeRetryTimer = null;
+  keepAwakeRetries = 0;
+  if (wakeLock) { try{ wakeLock.release(); }catch(e){} wakeLock = null; }
+  if (keepAwakeVideo) {
+    try{ keepAwakeVideo.pause(); }catch(e){}
+    keepAwakeVideo.remove();
+    keepAwakeVideo = null;
+  }
+  window.removeEventListener('pointerdown', resumeKeepAwake, {passive:true});
+  document.removeEventListener('visibilitychange', onVisibility, {passive:true});
+  window.removeEventListener('pagehide', onPageHide, {passive:true});
+  console.log('[KeepAwake] stopped');
+}
+// ===== /KEEP-AWAKE =====
+
+
 function fmt(sec){
   const m = Math.floor(sec/60), s = sec%60;
   return String(m).padStart(2,'0') + ":" + String(s).padStart(2,'0');
