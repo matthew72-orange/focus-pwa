@@ -158,6 +158,7 @@ stopBtn.addEventListener('click', () => endSession(false, 'manual'));
 
 function startSession(task, mins){
   initAudioUnlock(); // ← 追加：ユーザー操作直後に音を解錠
+  prepareTTS();                 // ★追加：ここでTTSを起こす
   startAt = new Date();
   targetSec = mins * 60;
   setup.classList.add('hidden');
