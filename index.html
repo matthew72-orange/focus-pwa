@@ -165,6 +165,9 @@ function startSession(task, mins){
   run.classList.remove('hidden');
   taskLabel.textContent = task;
   updateTimer(); tHandle = setInterval(updateTimer, 250);
+  // 画面を落とさない（二重保険）
+  startKeepAwake();
+
 
   // iOSスリープ抑止ワークアラウンド（ユーザー操作後のみ有効）
   if (!keepAwakeVideo) {
@@ -236,10 +239,8 @@ async function endSession(success, reason){
     run.classList.add('hidden');
     setup.classList.remove('hidden');
     startAt = null;
-    if (keepAwakeVideo){
-      try{ keepAwakeVideo.pause(); }catch(e){}
-      keepAwakeVideo.remove(); keepAwakeVideo=null;
-    }
+    // ← ここはまとめて停止（WakeLock & 動画）
+    stopKeepAwake();
   }, 4000);
 } // ←←← ★ これが endSession() を閉じるカッコ
 // （この下に function speak(...) / function fmt(...) が続く）
