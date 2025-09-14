@@ -105,7 +105,7 @@ async function beep(freq=880, ms=220){
   if (!audioCtx) return;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  gain.gain.value = 0.18;             // ← 少し大きめ（必要なら0.25まで）
+  gain.gain.value = 0.22;             // ← 少し大きめ（必要なら0.25まで）
   osc.type = 'sine';
   osc.frequency.value = freq;
   osc.connect(gain).connect(audioCtx.destination);
@@ -201,11 +201,11 @@ async function endSession(success, reason){
   // フィードバック（音/読み上げ/バイブ）
   try { navigator.vibrate && navigator.vibrate(success ? [40,40,40] : [160]); } catch(e){}
   if (success) {
-    beep(1046, 150); setTimeout(()=>beep(1318, 180), 160); // 成功チャイム
-    speak(`お疲れ様。目標時間、${minutes} 分。ひと息いれましょうか？`);
+    beep(1046, 220); setTimeout(()=>beep(1318, 240), 200); // 上昇2音
+    setTimeout(()=>speak(`お疲れ様。目標時間、${minutes} 分。ひと息いれましょうか？`), 420);
   } else {
-    beep(392, 200); setTimeout(()=>beep(330, 220), 220);   // 失敗チャイム
-    speak(`着座してから ${minutes} 分しか経っていません。もう少し頑張れます。`);
+    beep(392, 260); setTimeout(()=>beep(330, 260), 260);   // 下降2音
+    setTimeout(()=>speak(`着座してから ${minutes} 分しか経っていません。もう少し頑張れます。`), 520);
   }
   
   // サーバPOST（任意）
@@ -257,14 +257,38 @@ if ('speechSynthesis' in window) {
   setTimeout(pickJaVoice, 300);
 }
 
-function speak(text){
+// 追加：声一覧が揃うまで待つ
+function waitForVoices(timeout=1500){
+  return new Promise(resolve=>{
+    if (speechSynthesis.getVoices().length) return resolve();
+    const timer = setTimeout(()=>{ speechSynthesis.onvoiceschanged=null; resolve(); }, timeout);
+    speechSynthesis.onvoiceschanged = ()=>{ clearTimeout(timer); speechSynthesis.onvoiceschanged=null; resolve(); };
+  });
+}
+
+// 追加：一部iOSで勝手にpauseされる問題の対策
+function speakWithResume(utter){
   try{
-    if (!('speechSynthesis' in window)) return;
-    const u = new SpeechSynthesisUtterance(text);
-    if (jaVoice) u.voice = jaVoice;
-    u.lang = 'ja-JP'; u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
-    window.speechSynthesis.speak(u);
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utter);
+    let tries = 12; // ≒ 2.4秒だけ監視
+    const id = setInterval(()=>{
+      if (!speechSynthesis.speaking && !speechSynthesis.pending) { clearInterval(id); return; }
+      if (speechSynthesis.paused) { try{ speechSynthesis.resume(); }catch(e){} }
+      if (--tries<=0) clearInterval(id);
+    }, 200);
   }catch(e){}
+}
+  
+async function speak(text){
+  if (!('speechSynthesis' in window)) return;
+  await ensureAudioReady();           // ← WebAudio側も確実に再開
+  await waitForVoices();              // ← 声が揃うまで待つ
+  pickJaVoice();
+  const u = new SpeechSynthesisUtterance(text);
+  if (jaVoice) u.voice = jaVoice;
+  u.lang = 'ja-JP'; u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
+  speakWithResume(u);                 // ← ワークアラウンド付きで発話
 }
  
 function fmt(sec){
