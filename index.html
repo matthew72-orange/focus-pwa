@@ -88,17 +88,32 @@ function initAudioUnlock(){
   osc.start();
   setTimeout(()=>{ osc.stop(); audioUnlocked = true; }, 60);
 }
+
+async function ensureAudioReady(){
+  if (!audioCtx) initAudioUnlock();
+  try { await audioCtx.resume(); } catch(e){}
+}
+window.addEventListener('pointerdown', ensureAudioReady, {passive:true});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) ensureAudioReady();
+});
+
+  
 // 成功/失敗用の簡易チャイム（fallback）
-function beep(freq=880, ms=150){
+async function beep(freq=880, ms=220){
+  await ensureAudioReady();
   if (!audioCtx) return;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  gain.gain.value = 0.08;
+  gain.gain.value = 0.18;             // ← 少し大きめ（必要なら0.25まで）
+  osc.type = 'sine';
   osc.frequency.value = freq;
   osc.connect(gain).connect(audioCtx.destination);
   osc.start();
-  setTimeout(()=>{ gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.12); }, ms-30);
-  setTimeout(()=>osc.stop(), ms+40);
+  setTimeout(()=>{
+    try{ gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.12); }catch(e){}
+  }, Math.max(60, ms-120));
+  setTimeout(()=>{ try{ osc.stop(); }catch(e){} }, ms+80);
 }
   
 // ------- PWA: SW登録 -------
