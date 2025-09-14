@@ -126,10 +126,17 @@ if ('serviceWorker' in navigator) {
 // ------- 画面要素 -------
 const $ = s => document.querySelector(s);
 const setup = $('#setup'), run = $('#run');
-const startBtn = $('#startBtn'), stopBtn = $('#stopBtn');
+const Btn = $('#Btn'), stopBtn = $('#stopBtn');
 const taskInput = $('#task'), minsSel = $('#mins'), emailInput = $('#email');
 const remain = $('#remain'), taskLabel = $('#taskLabel');
 let startAt = null, targetSec = 0, tHandle = null, currentTask = "", userEmail = "";
+// ---- 履歴（ローカル保存） ----
+let sessions = JSON.parse(localStorage.getItem('sessions') || '[]'); // 配列
+function saveSessions() {
+  if (sessions.length > 1000) sessions = sessions.slice(-1000); // 一応の上限
+  localStorage.setItem('sessions', JSON.stringify(sessions));
+}
+
 
 // ------- ホーム追加（主にAndroid/一部ブラウザ） -------
 let deferredPrompt = null;
