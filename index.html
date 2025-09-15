@@ -12,9 +12,29 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <style>
   :root{--bg:#0b0b0c;--fg:#f7f7f8;--muted:#9aa0a6;--accent:#4f8cff;}
-  html,body{height:100%;}
-  body{margin:0; font-family:-apple-system, system-ui, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", sans-serif; background:var(--bg); color:var(--fg); display:flex; align-items:center; justify-content:center;}
+  html,body{
+  margin:0; padding:0;
+  height:auto;
+  min-height:100dvh;              /* 動的vhでiOSのバー伸縮に追従 */
+  overflow-y:auto;                 /* スクロールを許可 */
+  -webkit-overflow-scrolling:touch;
+  }
+  body{
+  margin:0;
+  font-family:-apple-system,system-ui,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",sans-serif;
+  background:var(--bg); color:var(--fg);
+  }
   .card{width:min(720px, 92vw); padding:20px 20px 28px; border-radius:20px; background:#151517; box-shadow:0 10px 30px rgba(0,0,0,.35);}
+  .container{
+  max-width:720px;
+  width:92vw;
+  margin:16px auto;               /* 上下に余白＋中央寄せ */
+  padding:0 0 calc(16px + env(safe-area-inset-bottom));
+  padding-left:env(safe-area-inset-left);
+  padding-right:env(safe-area-inset-right);
+  }
+  .card{width:100%;}                /* 幅はラッパーに任せる */
+  .row{display:flex; gap:12px; align-items:center; flex-wrap:wrap;} /* 折返しで横ハミ出し防止 */
   h1{margin:4px 0 12px; font-size:22px; font-weight:700;}
   label{display:block; margin:12px 0 4px; color:var(--muted);}
   input, select{width:100%; padding:12px 14px; border-radius:12px; border:1px solid #2a2a2e; background:#0f0f11; color:var(--fg); font-size:18px; outline:none;}
@@ -31,7 +51,9 @@
 </style>
 </head>
 <body>
-  <div class="card">
+  <main class="container">
+    <div class="card">
+
     <h1>Focus Timer</h1>
 
     <div id="setup" class="stack">
@@ -102,6 +124,7 @@
   </table>
   </div>
   </div>
+ </main>            <!-- ← 追加：ラッパーを閉じる -->
 
 <script>
 // ------- 基本設定（必要に応じて編集） -------
@@ -621,6 +644,16 @@ function fmt(sec){
   const m = Math.floor(sec/60), s = sec%60;
   return String(m).padStart(2,'0') + ":" + String(s).padStart(2,'0');
 }
+
+// 入力フォーカス時に中央へスクロール（iOS向け）
+['input','select','textarea'].forEach(sel=>{
+  document.querySelectorAll(sel).forEach(el=>{
+    el.addEventListener('focus', ()=> {
+      setTimeout(()=> el.scrollIntoView({block:'center', behavior:'smooth'}), 150);
+    });
+  });
+});
+
 </script>
 </body>
 </html>
