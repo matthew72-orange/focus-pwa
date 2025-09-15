@@ -60,6 +60,12 @@
         <button id="csvBtn" style="background:#2a6">履歴CSVをダウンロード</button>
         <button id="clearBtn" style="background:#444">履歴クリア</button>
       </div>
+      <div class="row">
+        <button id="notifyBtn" style="background:#6c5ce7">通知を有効化</button>
+        <button id="testPushBtn" style="background:#0984e3">テスト通知</button>
+      </div>
+<div class="muted">※ iPhoneはホーム画面に追加したPWAでのみPushが動作します。</div>
+
     </div>
 
     <div id="run" class="hidden center" style="flex-direction:column;">
@@ -88,7 +94,10 @@
 // ------- 基本設定（必要に応じて編集） -------
 const config = {
   endpoint: "https://example.com/focus_log", // ← あなたのGAS/Flask URLに変更
-  enablePost: false // サーバ未設定なら false のままでOK（POSTしない）
+  enablePost: false, // サーバ未設定なら false のままでOK（POSTしない）
+  // ★ 追加：Push用
+  pushServer: "https://YOUR-PUSH-SERVER.example.com", // ← 後述のNodeサーバのURL
+  vapidPublicKey: "BN2H6Gwrup9ZGFSGS7QwBDmh3OeSveTCpQhyX-pdzR5au2sXNC5eOMEdiY2Teoi86w6XjoMLoiUCTiOcl4W6oPY" // ← web-pushで生成した公開鍵
 };
 
 let audioCtx = null, audioUnlocked = false;
@@ -132,6 +141,56 @@ async function beep(freq=880, ms=220){
   }, Math.max(60, ms-120));
   setTimeout(()=>{ try{ osc.stop(); }catch(e){} }, ms+80);
 }
+
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i=0; i<rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function subscribePush(){
+  if (!('serviceWorker' in navigator)) return alert('Service Worker未対応');
+  if (!('PushManager' in window)) return alert('Push未対応ブラウザです');
+
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') { alert('通知が許可されませんでした'); return; }
+
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(config.vapidPublicKey)
+  });
+
+  // 端末一意ID（無ければ作成）
+  let devId = localStorage.getItem('deviceId');
+  if (!devId) {
+    const a = new Uint8Array(16); crypto.getRandomValues(a);
+    devId = [...a].map(x=>x.toString(16).padStart(2,'0')).join(''); 
+    localStorage.setItem('deviceId', devId);
+  }
+
+  // サーバへ保存（自分の購読として）
+  await fetch(config.pushServer + '/api/save-subscription', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ deviceId: devId, role: 'self', subscription: sub })
+  });
+
+  alert('通知を有効化しました');
+}
+
+async function testPush(){
+  let devId = localStorage.getItem('deviceId');
+  if (!devId) return alert('先に「通知を有効化」してください');
+  await fetch(config.pushServer + '/api/test-push', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ deviceId: devId, title:'テスト通知', body:'Focus Timerからのテストです' })
+  });
+  alert('テスト通知を送信しました（数秒お待ちください）');
+}
+
   
 // ------- PWA: SW登録 -------
 if ('serviceWorker' in navigator) {
@@ -176,6 +235,9 @@ startBtn.addEventListener('click', async () => {
   const mins = parseInt(minsSel.value, 10);
   startSession(currentTask, mins);
 });
+
+document.getElementById('notifyBtn').addEventListener('click', subscribePush);
+document.getElementById('testPushBtn').addEventListener('click', testPush);
 
 document.getElementById('csvBtn').addEventListener('click', downloadCSV);
 document.getElementById('clearBtn').addEventListener('click', clearHistory);
