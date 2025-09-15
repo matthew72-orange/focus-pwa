@@ -309,6 +309,22 @@ function startSession(task, mins){
   run.classList.remove('hidden');
   taskLabel.textContent = task;
   updateTimer(); tHandle = setInterval(updateTimer, 250);
+
+  try {
+    const devId = localStorage.getItem('deviceId');
+    const familyCode = (localStorage.getItem('familyCode') || '').trim() || null;
+    const title = '▶️ 勉強開始';
+    const finishAt = new Date(Date.now() + mins*60000);
+    const hhmm = finishAt.toLocaleTimeString('ja-JP', {hour12:false, hour:'2-digit', minute:'2-digit'});
+    const body = `${task} / 予定終了 ${hhmm}`;
+    const url  = location.origin;
+    fetch(config.pushServer + '/api/focus-result', {
+      method:'POST',
+      headers:{'Content-Type':'application/json' /* , 'x-api-key': '...'(導入時) */},
+      body: JSON.stringify({ deviceId: devId, familyCode, title, body, url })
+    }).catch(()=>{});
+  } catch(e) {}
+  
   // 画面を落とさない（二重保険）
   startKeepAwake();
 
