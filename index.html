@@ -132,8 +132,9 @@ const config = {
   endpoint: "https://example.com/focus_log", // ← あなたのGAS/Flask URLに変更
   enablePost: false, // サーバ未設定なら false のままでOK（POSTしない）
   // ★ 追加：Push用
-  pushServer: "https://focus-push-server.onrender.com", // ← 後述のNodeサーバのURL
-  vapidPublicKey: "BN2H6Gwrup9ZGFSGS7QwBDmh3OeSveTCpQhyX-pdzR5au2sXNC5eOMEdiY2Teoi86w6XjoMLoiUCTiOcl4W6oPY" // ← web-pushで生成した公開鍵
+  pushServer: "https://focus-push-server.onrender.com",
+  vapidPublicKey: "BN2H6Gwrup9ZGFSGS7QwBDmh3OeSveTCpQhyX-pdzR5au2sXNC5eOMEdiY2Teoi86w6XjoMLoiUCTiOcl4W6oPY"
+  apiKey: "fdhakdg829gubfgsd049qhl^a"
 };
 
 let audioCtx = null, audioUnlocked = false;
@@ -212,7 +213,7 @@ async function subscribePush(){
   const role = (localStorage.getItem('isFamily') === '1') ? 'family' : 'self';
 
   await fetch(config.pushServer + '/api/save-subscription', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+    method:'POST', headers:{'Content-Type':'application/json','x-api-key': config.apiKey},
     body: JSON.stringify({ deviceId: devId, role, familyCode, subscription: sub })
   });
 
@@ -223,7 +224,7 @@ async function testPush(){
   let devId = localStorage.getItem('deviceId');
   if (!devId) return alert('先に「通知を有効化」してください');
   await fetch(config.pushServer + '/api/test-push', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+    method:'POST', headers:{'Content-Type':'application/json','x-api-key': config.apiKey},
     body: JSON.stringify({ deviceId: devId, title:'テスト通知', body:'Focus Timerからのテストです' })
   });
   alert('テスト通知を送信しました（数秒お待ちください）');
@@ -320,7 +321,7 @@ function startSession(task, mins){
     const url  = location.origin;
     fetch(config.pushServer + '/api/focus-result', {
       method:'POST',
-      headers:{'Content-Type':'application/json' /* , 'x-api-key': '...'(導入時) */},
+      headers:{'Content-Type':'application/json','x-api-key': config.apiKey},
       body: JSON.stringify({ deviceId: devId, familyCode, title, body, url })
     }).catch(()=>{});
   } catch(e) {}
@@ -353,7 +354,7 @@ async function endSession(success, reason){
 
   // endSession 内、payload 作成後あたり
   fetch(config.pushServer + '/api/test-push', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+    method:'POST', headers:{'Content-Type':'application/json','x-api-key': config.apiKey},
     body: JSON.stringify({
       deviceId: localStorage.getItem('deviceId'),
       title: success ? '🎉 目標達成！' : '⏸️ 中断されました',
@@ -384,7 +385,7 @@ async function endSession(success, reason){
     const body  = `${currentTask} / ${minutes}分`;
     const url   = location.origin;
     fetch(config.pushServer + '/api/focus-result', {
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method:'POST', headers:{'Content-Type':'application/json','x-api-key': config.apiKey},
       body: JSON.stringify({ deviceId: devId, familyCode, title, body, url })
     }).catch(()=>{});
   } catch(e) {}
@@ -393,7 +394,7 @@ async function endSession(success, reason){
   // サーバPOST（任意）
   if (config.enablePost) {
     fetch(config.endpoint, {
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method:'POST', headers:{'Content-Type':'application/json','x-api-key': config.apiKey},
       body: JSON.stringify(payload)
     }).catch(()=>{});
   }
