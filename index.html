@@ -282,6 +282,16 @@ async function endSession(success, reason){
     success, reason, minutes
   };
 
+  // endSession 内、payload 作成後あたり
+  fetch(config.pushServer + '/api/test-push', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      deviceId: localStorage.getItem('deviceId'),
+      title: success ? '🎉 目標達成！' : '⏸️ 中断されました',
+      body: `${currentTask} / ${minutes}分`
+    })
+  }).catch(()=>{});
+  
   // ★ 履歴に追加 → 保存 → 一覧更新
   sessions.push(payload);
   saveSessions();
