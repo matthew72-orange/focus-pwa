@@ -55,6 +55,11 @@
         <button id="startBtn">スタート</button>
         <button id="installBtn" class="hidden">ホーム追加</button>
       </div>
+      <!-- ★追加: CSV / クリア -->
+      <div class="row">
+        <button id="csvBtn" style="background:#2a6">履歴CSVをダウンロード</button>
+        <button id="clearBtn" style="background:#444">履歴クリア</button>
+      </div>
     </div>
 
     <div id="run" class="hidden center" style="flex-direction:column;">
@@ -65,6 +70,18 @@
       <div class="muted" style="margin-top:10px">⚠️ この画面から離れると即 Fail になります。</div>
     </div>
 
+  <div id="recent" class="card" style="margin-top:16px">
+  <h2 style="font-size:18px;margin:4px 0 10px">直近10件</h2>
+  <table id="recentTable" style="width:100%;border-collapse:collapse;font-size:14px">
+    <thead><tr>
+      <th style="text-align:left;padding:6px;border-bottom:1px solid #333">日時</th>
+      <th style="text-align:left;padding:6px;border-bottom:1px solid #333">タスク</th>
+      <th style="text-align:right;padding:6px;border-bottom:1px solid #333">分</th>
+      <th style="text-align:left;padding:6px;border-bottom:1px solid #333">結果</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  </div>
   </div>
 
 <script>
@@ -160,6 +177,12 @@ startBtn.addEventListener('click', async () => {
   startSession(currentTask, mins);
 });
 
+document.getElementById('csvBtn').addEventListener('click', downloadCSV);
+document.getElementById('clearBtn').addEventListener('click', clearHistory);
+
+// 起動時に1回描画
+renderRecent();
+  
 stopBtn.addEventListener('click', () => endSession(false, 'manual'));
 
 function startSession(task, mins){
@@ -197,6 +220,11 @@ async function endSession(success, reason){
     success, reason, minutes
   };
 
+  // ★ 履歴に追加 → 保存 → 一覧更新
+  sessions.push(payload);
+  saveSessions();
+  renderRecent();
+  
   // フィードバック（音/読み上げ/バイブ）
   try { navigator.vibrate && navigator.vibrate(success ? [40,40,40] : [160]); } catch(e){}
   if (success) {
@@ -420,6 +448,58 @@ function stopKeepAwake(){
 }
 // ===== /KEEP-AWAKE =====
 
+function toCSV(rows){
+  const header = ["date","task","started_at","ended_at","minutes","result"];
+  const esc = s => `"${String(s).replace(/"/g,'""')}"`; // RFC4180風エスケープ
+  const body = rows.map(r => [
+    esc(new Date(r.ended_at || r.started_at).toLocaleString('ja-JP', {hour12:false})),
+    esc(r.task || ""),
+    esc(r.started_at || ""),
+    esc(r.ended_at || ""),
+    esc(r.minutes ?? ""),
+    esc(r.success ? "success" : "fail"),
+  ].join(","));
+  return [header.join(","), ...body].join("\r\n");
+}
+
+function downloadCSV(){
+  if (!sessions.length){ alert("まだ記録がありません。"); return; }
+  const csv = toCSV(sessions);
+  const blob = new Blob(["\uFEFF"+csv], {type: "text/csv;charset=utf-8"}); // UTF-8+BOMでExcel/iOS対策
+  const ymd = new Date().toISOString().slice(0,10);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `focus_log_${ymd}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+function clearHistory(){
+  if (!confirm("履歴を削除します。よろしいですか？")) return;
+  sessions = [];
+  saveSessions();
+  renderRecent();
+  alert("履歴を削除しました。");
+}
+
+function renderRecent(){
+  const tb = document.querySelector('#recentTable tbody');
+  if (!tb) return;
+  tb.innerHTML = '';
+  const last10 = [...sessions].slice(-10).reverse();
+  for (const r of last10){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding:6px;border-bottom:1px solid #222">
+        ${new Date(r.ended_at || r.started_at).toLocaleString('ja-JP', {hour12:false})}
+      </td>
+      <td style="padding:6px;border-bottom:1px solid #222">${(r.task||'')}</td>
+      <td style="padding:6px;border-bottom:1px solid #222;text-align:right">${r.minutes ?? ''}</td>
+      <td style="padding:6px;border-bottom:1px solid #222">${r.success ? '✅成功' : '❌失敗'}</td>`;
+    tb.appendChild(tr);
+  }
+}
 
 function fmt(sec){
   const m = Math.floor(sec/60), s = sec%60;
