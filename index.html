@@ -423,7 +423,8 @@ async function endSession(success, reason){
   }, 4000);
 } // ←←← ★ これが endSession() を閉じるカッコ
 // （この下に function speak(...) / function fmt(...) が続く）
-  
+
+/*
 let jaVoice = null;
 function pickJaVoice(){
   const voices = window.speechSynthesis?.getVoices?.() || [];
@@ -432,6 +433,21 @@ function pickJaVoice(){
         || voices.find(v => /kyoko|otoya/i.test(v.name||""))
         || null;
 }
+*/
+
+let jaVoice = null;
+function pickJaVoice(){
+  const voices = window.speechSynthesis?.getVoices?.() || [];
+  // 日本語かつ女性声を優先（Google日本語女性やKyoko）
+  jaVoice = voices.find(v =>
+      (v.lang||"").toLowerCase().startsWith("ja")
+      && /female|kyoko|google/i.test(v.name||"")
+  )
+    // 見つからなければ日本語声の最初
+    || voices.find(v => (v.lang||"").toLowerCase().startsWith("ja"))
+    || null;
+}
+  
 if ('speechSynthesis' in window) {
   window.speechSynthesis.onvoiceschanged = pickJaVoice;
   // 端末によっては即取得できることもある
@@ -471,7 +487,8 @@ async function prepareTTS(){
   u.lang = 'ja-JP'; u.rate = 1.0; u.pitch = 1.0; u.volume = 0.01; // ほぼ無音
   speakWithResume(u);
 }
-  
+
+/*
 async function speak(text){
   if (!('speechSynthesis' in window)) return;
   await ensureAudioReady();           // ← WebAudio側も確実に再開
@@ -481,6 +498,25 @@ async function speak(text){
   if (jaVoice) u.voice = jaVoice;
   u.lang = 'ja-JP'; u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
   speakWithResume(u);                 // ← ワークアラウンド付きで発話
+}
+*/
+
+async function speak(text){
+  if (!('speechSynthesis' in window)) return;
+  await ensureAudioReady();
+  await waitForVoices();
+  pickJaVoice();
+  const u = new SpeechSynthesisUtterance(text);
+  if (jaVoice) {
+    u.voice = jaVoice;
+    console.log("[TTS] Using voice:", jaVoice.name);
+  }
+  // 女性声を選んだ場合は少し柔らかめに
+  u.lang = 'ja-JP';
+  u.rate = 1.0;
+  u.pitch = 1.0;
+  u.volume = 1.0;
+  speakWithResume(u);
 }
 
 // ===== KEEP-AWAKE（WakeLock + 無音動画ループ + リトライ） =====
