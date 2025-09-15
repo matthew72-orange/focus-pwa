@@ -52,6 +52,18 @@
       </div>
       <div class="muted">※メール送信はサーバのエンドポイント設定が必要です（<code>config.endpoint</code> を編集）。</div>
       <div class="row">
+        <label style="width:100%">
+          家族コード（任意・共有用）
+          <input id="familyCode" type="text" placeholder="例: MASA-2025" inputmode="latin" autocomplete="off">
+        </label>
+      </div>
+      <div class="row" style="align-items:center">
+        <label>
+          <input id="isFamily" type="checkbox">
+          この端末は家族の通知受信用
+        </label>
+      </div>
+      <div class="row">
         <button id="startBtn">スタート</button>
         <button id="installBtn" class="hidden">ホーム追加</button>
       </div>
@@ -164,18 +176,20 @@ async function subscribePush(){
     applicationServerKey: urlBase64ToUint8Array(config.vapidPublicKey)
   });
 
-  // 端末一意ID（無ければ作成）
+  // deviceId を保持
   let devId = localStorage.getItem('deviceId');
   if (!devId) {
     const a = new Uint8Array(16); crypto.getRandomValues(a);
-    devId = [...a].map(x=>x.toString(16).padStart(2,'0')).join(''); 
+    devId = [...a].map(x=>x.toString(16).padStart(2,'0')).join('');
     localStorage.setItem('deviceId', devId);
   }
 
-  // サーバへ保存（自分の購読として）
+  const familyCode = (localStorage.getItem('familyCode') || '').trim() || null;
+  const role = (localStorage.getItem('isFamily') === '1') ? 'family' : 'self';
+
   await fetch(config.pushServer + '/api/save-subscription', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ deviceId: devId, role: 'self', subscription: sub })
+    body: JSON.stringify({ deviceId: devId, role, familyCode, subscription: sub })
   });
 
   alert('通知を有効化しました');
@@ -213,6 +227,21 @@ function saveSessions() {
   localStorage.setItem('sessions', JSON.stringify(sessions));
 }
 
+const familyCodeInput = document.getElementById('familyCode');
+const isFamilyInput = document.getElementById('isFamily');
+
+// ロード時に復元
+familyCodeInput.value = localStorage.getItem('familyCode') || '';
+isFamilyInput.checked = localStorage.getItem('isFamily') === '1';
+
+// 入力変更を保存
+familyCodeInput.addEventListener('change', ()=> {
+  localStorage.setItem('familyCode', familyCodeInput.value.trim());
+});
+isFamilyInput.addEventListener('change', ()=> {
+  localStorage.setItem('isFamily', isFamilyInput.checked ? '1' : '0');
+});
+  
 
 // ------- ホーム追加（主にAndroid/一部ブラウザ） -------
 let deferredPrompt = null;
@@ -306,6 +335,20 @@ async function endSession(success, reason){
     beep(392, 260); setTimeout(()=>beep(330, 260), 260);   // 下降2音
     setTimeout(()=>speak(`着座してから ${minutes} 分しか経っていません。もう少し頑張れます。`), 520);
   }
+
+  // …既存の表示/音声/バイブ処理の後あたりに追加…
+  try {
+    const devId = localStorage.getItem('deviceId');
+    const familyCode = (localStorage.getItem('familyCode') || '').trim() || null;
+    const title = success ? '🎉 目標達成！' : '⏸️ 中断されました';
+    const body  = `${currentTask} / ${minutes}分`;
+    const url   = location.origin;
+    fetch(config.pushServer + '/api/focus-result', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ deviceId: devId, familyCode, title, body, url })
+    }).catch(()=>{});
+  } catch(e) {}
+
   
   // サーバPOST（任意）
   if (config.enablePost) {
