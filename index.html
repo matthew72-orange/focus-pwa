@@ -202,7 +202,7 @@ if ('serviceWorker' in navigator) {
 // ------- 画面要素 -------
 const $ = s => document.querySelector(s);
 const setup = $('#setup'), run = $('#run');
-const Btn = $('#Btn'), stopBtn = $('#stopBtn');
+const startBtn = $('#startBtn'), stopBtn = $('#stopBtn'); // ← これ！
 const taskInput = $('#task'), minsSel = $('#mins'), emailInput = $('#email');
 const remain = $('#remain'), taskLabel = $('#taskLabel');
 let startAt = null, targetSec = 0, tHandle = null, currentTask = "", userEmail = "";
